@@ -1,12 +1,3 @@
-"""
-Système de tickets complet avec :
-  - Panel avec menu déroulant (catégories)
-  - Création de canal privé par ticket
-  - Claim / Fermeture / Suppression
-  - Transcript HTML automatique
-  - Logs dans un canal dédié
-"""
-
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -16,12 +7,17 @@ import os
 import asyncio
 from datetime import datetime, timezone
 
+# ─────────────────────── helpers ───────────────────────
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+TICKETS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'tickets.json')
+COUNTER_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'counter.json')
+
 
 def _legal_buttons() -> list[Button]:
     """Retourne les boutons ToS + Confidentialité si configurés."""
-    cfg_path = os.path.join(os.path.dirname(__file__), '..', 'config.json')
     try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         legal = cfg.get('legal', {})
         buttons = []
@@ -34,13 +30,6 @@ def _legal_buttons() -> list[Button]:
         return buttons
     except Exception:
         return []
-
-
-# ─────────────────────── helpers ───────────────────────
-
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config.json')
-TICKETS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'tickets.json')
-COUNTER_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'counter.json')
 
 
 def load_config():
@@ -88,7 +77,6 @@ TICKET_CATEGORIES = {
     'other':        {'label': '📋 Autre',            'emoji': '📋', 'color': discord.Color.greyple()},
 }
 
-
 # ────────────────────── transcript ──────────────────────
 
 async def generate_transcript(channel: discord.TextChannel) -> discord.File:
@@ -104,13 +92,11 @@ async def generate_transcript(channel: discord.TextChannel) -> discord.File:
         avatar = msg.author.display_avatar.url if msg.author.display_avatar else ''
         content = discord.utils.escape_mentions(msg.content or '')
         content = content.replace('\n', '<br>')
-        # attachments
         for a in msg.attachments:
             if a.content_type and a.content_type.startswith('image/'):
                 content += f'<br><img src="{a.url}" style="max-width:400px;border-radius:4px;">'
             else:
                 content += f'<br><a href="{a.url}">{a.filename}</a>'
-        # embeds summary
         for e in msg.embeds:
             title = e.title or ''
             desc = e.description or ''
@@ -156,7 +142,6 @@ async def generate_transcript(channel: discord.TextChannel) -> discord.File:
     buf = html.encode('utf-8')
     return discord.File(fp=__import__('io').BytesIO(buf), filename=f'transcript-{channel.name}.html')
 
-
 # ─────────────────────── modals ─────────────────────────
 
 class TicketReasonModal(Modal, title='Ouvrir un ticket'):
@@ -190,7 +175,6 @@ class CloseReasonModal(Modal, title='Fermer le ticket'):
         await interaction.response.defer()
         await close_ticket(interaction, str(self.reason) or 'Aucune raison fournie')
 
-
 # ─────────────────────── views ──────────────────────────
 
 class CategorySelect(Select):
@@ -215,8 +199,9 @@ class CategorySelect(Select):
 
 
 class TicketPanelView(View):
+    # NON PERSISTANT (pas enregistré dans add_view)
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=0)
         self.add_item(CategorySelect())
         for btn in _legal_buttons():
             self.add_item(btn)
@@ -273,7 +258,7 @@ class TicketControlsView(View):
 
 class DeleteConfirmView(View):
     def __init__(self):
-        super().__init__(timeout=30)
+        super().__init__(timeout=None)
 
     @discord.ui.button(label='🗑️ Supprimer définitivement', style=discord.ButtonStyle.red, custom_id='ticket:delete_confirm')
     async def confirm(self, interaction: discord.Interaction, button: Button):
@@ -290,7 +275,6 @@ class DeleteConfirmView(View):
         await interaction.response.send_message('❌ Suppression annulée.', ephemeral=True)
         self.stop()
 
-
 # ─────────────────── ticket logic ───────────────────────
 
 async def create_ticket(interaction: discord.Interaction, category: str, reason: str):
@@ -299,7 +283,6 @@ async def create_ticket(interaction: discord.Interaction, category: str, reason:
     guild = interaction.guild
     user = interaction.user
 
-    # Check max tickets per user
     tickets = load_tickets()
     user_open = [
         t for t in tickets.values()
@@ -313,7 +296,6 @@ async def create_ticket(interaction: discord.Interaction, category: str, reason:
         )
         return
 
-    # Category / overwrites
     cat_info = TICKET_CATEGORIES.get(category, TICKET_CATEGORIES['other'])
     ticket_num = next_ticket_number()
     channel_name = f'ticket-{ticket_num:04d}-{user.display_name[:15].lower().replace(" ", "-")}'
@@ -357,7 +339,6 @@ async def create_ticket(interaction: discord.Interaction, category: str, reason:
         reason=f'Ticket ouvert par {user}',
     )
 
-    # Save ticket data
     tickets[str(channel.id)] = {
         'channel_id': channel.id,
         'author_id': user.id,
@@ -372,7 +353,6 @@ async def create_ticket(interaction: discord.Interaction, category: str, reason:
     }
     save_tickets(tickets)
 
-    # Send ticket embed
     embed = discord.Embed(
         title=f'{cat_info["emoji"]} Ticket #{ticket_num:04d} — {cat_info["label"]}',
         description=(
@@ -400,7 +380,6 @@ async def create_ticket(interaction: discord.Interaction, category: str, reason:
         f'✅ Ton ticket a été créé : {channel.mention}', ephemeral=True
     )
 
-    # Log
     await send_ticket_log(interaction.client, guild, tickets[str(channel.id)], action='open', actor=user)
 
 
@@ -423,7 +402,6 @@ async def close_ticket(interaction: discord.Interaction, reason: str):
     ticket['closed_at'] = datetime.now(timezone.utc).isoformat()
     save_tickets(tickets)
 
-    # Generate transcript
     file = await generate_transcript(interaction.channel)
 
     cfg = load_config()
@@ -436,7 +414,6 @@ async def close_ticket(interaction: discord.Interaction, reason: str):
                 content=f'📋 Transcript — #{interaction.channel.name}', file=file
             )
 
-    # Close embed
     embed = discord.Embed(
         title='🔒 Ticket fermé',
         description=(
@@ -451,15 +428,12 @@ async def close_ticket(interaction: discord.Interaction, reason: str):
     view = DeleteConfirmView()
     await interaction.channel.send(embed=embed, view=view)
 
-    # Remove user permission (they can no longer write)
     author = interaction.guild.get_member(ticket['author_id'])
     if author:
         await interaction.channel.set_permissions(author, send_messages=False)
 
-    # Log
     await send_ticket_log(interaction.client, interaction.guild, ticket, action='close', actor=interaction.user)
 
-    # Auto delete after 5s
     await asyncio.sleep(5)
     try:
         tickets = load_tickets()
@@ -501,20 +475,17 @@ async def send_ticket_log(bot, guild, ticket_data, action: str, actor: discord.M
 
     await log_channel.send(embed=embed)
 
-
 # ─────────────────────── cog ────────────────────────────
 
 class Tickets(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Register persistent views
-        self.bot.add_view(TicketPanelView())
+        # Persistent views (sans boutons URL)
         self.bot.add_view(TicketControlsView())
         self.bot.add_view(DeleteConfirmView())
 
     tickets_group = app_commands.Group(name='ticket', description='Commandes du système de tickets')
 
-    # ── /ticket setup ──────────────────────────────────
     @tickets_group.command(name='setup', description='Configure le panel de tickets dans ce canal')
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_setup(self, interaction: discord.Interaction):
@@ -555,7 +526,6 @@ class Tickets(commands.Cog):
 
         await interaction.response.send_message('✅ Panel de tickets créé !', ephemeral=True)
 
-    # ── /ticket config ─────────────────────────────────
     @tickets_group.command(name='config', description='Configure les paramètres du système de tickets')
     @app_commands.describe(
         categorie='Catégorie Discord pour les tickets',
@@ -604,7 +574,6 @@ class Tickets(commands.Cog):
         embed = discord.Embed(title='⚙️ Configuration Tickets', description=desc, color=discord.Color.green())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ── /ticket status ─────────────────────────────────
     @tickets_group.command(name='status', description='Affiche la configuration actuelle')
     @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_status(self, interaction: discord.Interaction):
@@ -629,7 +598,6 @@ class Tickets(commands.Cog):
         embed.add_field(name='Tickets ouverts', value=str(open_count), inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ── /ticket add ────────────────────────────────────
     @tickets_group.command(name='add', description='Ajoute un utilisateur au ticket actuel')
     @app_commands.describe(membre='Le membre à ajouter')
     async def ticket_add(self, interaction: discord.Interaction, membre: discord.Member):
@@ -650,7 +618,6 @@ class Tickets(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    # ── /ticket remove ─────────────────────────────────
     @tickets_group.command(name='remove', description='Retire un utilisateur du ticket actuel')
     @app_commands.describe(membre='Le membre à retirer')
     async def ticket_remove(self, interaction: discord.Interaction, membre: discord.Member):
@@ -671,7 +638,6 @@ class Tickets(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    # ── /ticket close ──────────────────────────────────
     @tickets_group.command(name='close', description='Ferme le ticket actuel')
     @app_commands.describe(raison='Raison de la fermeture')
     async def ticket_close(self, interaction: discord.Interaction, raison: str = 'Aucune raison fournie'):
@@ -682,7 +648,6 @@ class Tickets(commands.Cog):
         await interaction.response.defer()
         await close_ticket(interaction, raison)
 
-    # ── /ticket delete ─────────────────────────────────
     @tickets_group.command(name='delete', description='Supprime le ticket actuel immédiatement')
     @app_commands.checks.has_permissions(manage_channels=True)
     async def ticket_delete(self, interaction: discord.Interaction):
@@ -700,7 +665,6 @@ class Tickets(commands.Cog):
         view = DeleteConfirmView()
         await interaction.response.send_message(embed=embed, view=view)
 
-    # ── /ticket list ───────────────────────────────────
     @tickets_group.command(name='list', description='Liste tous les tickets ouverts')
     @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_list(self, interaction: discord.Interaction):
@@ -728,13 +692,6 @@ class Tickets(commands.Cog):
             embed.set_footer(text=f'… et {len(open_tickets) - 20} autres')
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    # ── error handler ──────────────────────────────────
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message('❌ Tu n\'as pas la permission.', ephemeral=True)
-        else:
-            await interaction.response.send_message(f'❌ Erreur : {error}', ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
