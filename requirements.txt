@@ -1,27 +1,2 @@
-# Core Discord Bot
-discord.py>=2.3.0
-
-# Environment & Security
-python-dotenv>=1.0.0
-
-# HTTP & Requests
-aiohttp>=3.9.0
-requests>=2.31.0
-
-# Audio & Music
-yt-dlp>=2024.1.0
-PyNaCl>=1.5.0
-ffmpeg-python>=0.2.1
-
-# Image Processing
-Pillow>=10.0.0
-
-# Database (optional, for persistence)
-# aiosqlite>=0.19.0
-# sqlalchemy>=2.0.0
-
-# Data Processing
-numpy>=1.24.0
-
-# Utilities
-python-dateutil>=2.8.2
+discord.py
+python-dotenv
