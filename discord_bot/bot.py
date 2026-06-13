@@ -4,6 +4,9 @@ from discord import app_commands
 import json
 import os
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 
@@ -74,9 +77,9 @@ class TicketBot(commands.Bot):
 bot = TicketBot()
 
 if __name__ == '__main__':
-    token = config.get('token', '')
-    if not token or token == 'VOTRE_TOKEN_ICI':
-        print('❌ Erreur : Remplis ton token dans config.json')
+    token = os.getenv('TOKEN')
+    if not token:
+        print('❌ Erreur : Remplis ton token dans le fichier .env')
         sys.exit(1)
     print('Chargement des extensions...')
     bot.run(token, log_handler=None)
