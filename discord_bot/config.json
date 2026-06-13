@@ -1,0 +1,28 @@
+{
+    "token": "",
+    "prefix": "!",
+    "guild_id": null,
+    "colors": {
+        "primary": 5793266,
+        "success": 5763719,
+        "error": 15548997,
+        "warning": 16705372,
+        "info": 3447003
+    },
+    "ticket_settings": {
+        "category_id": null,
+        "log_channel_id": null,
+        "support_role_id": null,
+        "max_tickets_per_user": 1,
+        "panel_channel_id": null,
+        "panel_message_id": null,
+        "transcript_channel_id": null
+    },
+    "mod_log_channel_id": null,
+    "legal": {
+        "tos_url": "https://TON-LIEN-CONDITIONS-UTILISATION.com",
+        "privacy_url": "https://TON-LIEN-POLITIQUE-CONFIDENTIALITE.com",
+        "bot_name": "MonBot",
+        "support_server": null
+    }
+}
